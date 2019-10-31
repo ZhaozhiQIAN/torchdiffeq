@@ -26,17 +26,21 @@ else:
 
 device = torch.device('cuda:' + str(args.gpu) if torch.cuda.is_available() else 'cpu')
 
-true_y0 = torch.tensor([[2., 0.]])
-t = torch.linspace(0., 25., args.data_size)
-true_A = torch.tensor([[-0.1, 2.0], [-2.0, -0.1]])
+# initial value (2, 1)
+true_y0 = torch.tensor([[2.0, 1.0]])
+t = torch.linspace(-2.5, 2.5, args.data_size)
 
+eps = 0.01
 
 class Lambda(nn.Module):
 
     def forward(self, t, y):
-        return torch.mm(y**3, true_A)
+        x = y[:, 0]
+        dx_dt = 1 / eps * (y[:, 1] - 1.0 / 3.0 * x**3 + x)
+        dy_dt = -x
+        return torch.cat((dx_dt.reshape(-1, 1), dy_dt.reshape(-1, 1)), axis=1)
 
-
+# This is not the actual solution!
 with torch.no_grad():
     true_y = odeint(Lambda(), true_y0, t, method='dopri5')
 
@@ -152,7 +156,7 @@ if __name__ == '__main__':
     ii = 0
 
     func = ODEFunc()
-    optimizer = optim.RMSprop(func.parameters(), lr=5e-4)
+    optimizer = optim.RMSprop(func.parameters(), lr=1e-3)
     end = time.time()
 
     time_meter = RunningAverageMeter(0.97)
