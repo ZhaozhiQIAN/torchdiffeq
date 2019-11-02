@@ -7,6 +7,8 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 
+from ode_models import *
+
 parser = argparse.ArgumentParser('ODE demo')
 parser.add_argument('--method', type=str, choices=['dopri5', 'adams'], default='dopri5')
 parser.add_argument('--data_size', type=int, default=1000)
@@ -112,33 +114,6 @@ def visualize(true_y, pred_y, odefunc, itr):
         plt.pause(0.001)
 
 
-class ODEFunc(nn.Module):
-
-    def __init__(self):
-        super(ODEFunc, self).__init__()
-
-        self.net = nn.Sequential(
-            nn.Linear(4, 50),
-            nn.Tanh(),
-            nn.Linear(50, 2),
-        )
-
-        # self.net = nn.Sequential(
-        #     nn.Linear(4, 2)
-        # )
-
-        for m in self.net.modules():
-            if isinstance(m, nn.Linear):
-                nn.init.normal_(m.weight, mean=0, std=0.1)
-                nn.init.constant_(m.bias, val=0)
-
-    def forward(self, t, y):
-        # print(y.shape)
-        y_expand = torch.cat((y, y**3), axis=-1)
-        # print(y_expand.shape)
-        return self.net(y_expand) * torch.tensor([1./ (eps / 10), 1.])
-
-
 class RunningAverageMeter(object):
     """Computes and stores the average and current value"""
 
@@ -162,7 +137,7 @@ if __name__ == '__main__':
 
     ii = 0
 
-    func = ODEFunc()
+    func = ODEFuncLayeredCombined()
     optimizer = optim.Adam(func.parameters(), lr=1e-3)
     end = time.time()
 
