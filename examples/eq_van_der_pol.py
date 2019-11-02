@@ -88,7 +88,7 @@ def visualize(true_y, pred_y, odefunc, itr):
         ax_phase.set_ylabel('y')
         ax_phase.plot(true_y.numpy()[:, 0, 0], true_y.numpy()[:, 0, 1], 'g-')
         ax_phase.plot(pred_y.numpy()[:, 0, 0], pred_y.numpy()[:, 0, 1], 'b--')
-        ax_phase.set_xlim(-2, 2)
+        ax_phase.set_xlim(t.min(), t.max())
         ax_phase.set_ylim(-2, 2)
 
         ax_vecfield.cla()
@@ -103,7 +103,7 @@ def visualize(true_y, pred_y, odefunc, itr):
         dydt = dydt.reshape(21, 21, 2)
 
         ax_vecfield.streamplot(x, y, dydt[:, :, 0], dydt[:, :, 1], color="black")
-        ax_vecfield.set_xlim(-2, 2)
+        ax_vecfield.set_xlim(t.min(), t.max())
         ax_vecfield.set_ylim(-2, 2)
 
         fig.tight_layout()
@@ -118,10 +118,14 @@ class ODEFunc(nn.Module):
         super(ODEFunc, self).__init__()
 
         self.net = nn.Sequential(
-            nn.Linear(2, 50),
+            nn.Linear(4, 50),
             nn.Tanh(),
             nn.Linear(50, 2),
         )
+
+        # self.net = nn.Sequential(
+        #     nn.Linear(4, 2)
+        # )
 
         for m in self.net.modules():
             if isinstance(m, nn.Linear):
@@ -129,7 +133,10 @@ class ODEFunc(nn.Module):
                 nn.init.constant_(m.bias, val=0)
 
     def forward(self, t, y):
-        return self.net(y**3)
+        # print(y.shape)
+        y_expand = torch.cat((y, y**3), axis=-1)
+        # print(y_expand.shape)
+        return self.net(y_expand) * torch.tensor([1./ (eps / 10), 1.])
 
 
 class RunningAverageMeter(object):
@@ -156,7 +163,7 @@ if __name__ == '__main__':
     ii = 0
 
     func = ODEFunc()
-    optimizer = optim.RMSprop(func.parameters(), lr=1e-3)
+    optimizer = optim.Adam(func.parameters(), lr=1e-3)
     end = time.time()
 
     time_meter = RunningAverageMeter(0.97)
