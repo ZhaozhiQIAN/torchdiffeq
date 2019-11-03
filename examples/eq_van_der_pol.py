@@ -137,7 +137,7 @@ if __name__ == '__main__':
 
     ii = 0
 
-    func = ODEFuncLayeredCombined()
+    func = ODEFuncLayeredResidual()
     optimizer = optim.Adam(func.parameters(), lr=1e-3)
     end = time.time()
 
