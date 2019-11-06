@@ -169,3 +169,33 @@ class ODEFuncLayeredResidual(nn.Module):
         # print(torch.cat((x_out, y_out), -1).shape)
 
         return x_out_final + y_out_final
+
+    def forward_slow(self, t, y):
+        y_expand = torch.cat((y, y ** 3), axis=-1)
+
+        y_out = self.net_y(y_expand)
+        y_out_final = self.lin_y(y_out)
+        return y_out_final
+
+    def forward_fast(self, t, y):
+        y_expand = torch.cat((y, y ** 3), axis=-1)
+
+        y_out = self.net_y(y_expand)
+        x1_out = self.net_x1(y_expand)
+
+        x2_in = y_out + x1_out
+        x2_out = self.net_x2(x2_in)
+
+        x_out_final = self.lin_x(x2_out)
+
+        return x_out_final
+
+
+class ODEFuncLayeredResidualSlowOnly(ODEFuncLayeredResidual):
+    def forward(self, t, y):
+        return super(ODEFuncLayeredResidualSlowOnly, self).forward_slow(t, y)
+
+
+class ODEFuncLayeredResidualFastOnly(ODEFuncLayeredResidual):
+    def forward(self, t, y):
+        return super(ODEFuncLayeredResidualFastOnly, self).forward_fast(t, y)
