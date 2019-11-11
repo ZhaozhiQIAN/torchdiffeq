@@ -6,17 +6,18 @@ import torch.nn as nn
 
 class ODEFunc(nn.Module):
 
-    def __init__(self, eps=100):
+    def __init__(self, eps=100, dim_y=2):
         super(ODEFunc, self).__init__()
 
         self.eps = eps
+        self.dim_y = dim_y
 
         self.net = nn.Sequential(
-            nn.Linear(4, 50),
+            nn.Linear(self.dim_y * 2, 50),
             nn.Tanh(),
             nn.Linear(50, 50),
             nn.Tanh(),
-            nn.Linear(50, 2),
+            nn.Linear(50, self.dim_y),
         )
 
         # self.net = nn.Sequential(
@@ -36,6 +37,51 @@ class ODEFunc(nn.Module):
         out = self.net(y_expand)
         # print(out.shape)
         return out * torch.tensor([1./ (self.eps / 10), 1.])
+
+
+class ODEFunc0(nn.Module):
+
+    def __init__(self, dim_y=2):
+        super(ODEFunc0, self).__init__()
+
+        self.dim_y = dim_y
+
+        self.net = nn.Sequential(
+            nn.Linear(self.dim_y, 50),
+            nn.Tanh(),
+            nn.Linear(50, self.dim_y),
+        )
+
+        for m in self.net.modules():
+            if isinstance(m, nn.Linear):
+                nn.init.normal_(m.weight, mean=0, std=0.1)
+                nn.init.constant_(m.bias, val=0)
+
+    def forward(self, t, y):
+        return self.net(y)
+
+
+class ODEFuncAug(nn.Module):
+
+    def __init__(self, dim_y=2, dim_aug=2):
+        super(ODEFuncAug, self).__init__()
+
+        self.dim_y = dim_y
+        self.dim_aug = dim_aug
+
+        self.net = nn.Sequential(
+            nn.Linear(self.dim_y + self.dim_aug, 50),
+            nn.Tanh(),
+            nn.Linear(50, self.dim_y + self.dim_aug),
+        )
+
+        for m in self.net.modules():
+            if isinstance(m, nn.Linear):
+                nn.init.normal_(m.weight, mean=0, std=0.1)
+                nn.init.constant_(m.bias, val=0)
+
+    def forward(self, t, y):
+        return self.net(y)
 
 
 class ODEFuncLayered(nn.Module):
