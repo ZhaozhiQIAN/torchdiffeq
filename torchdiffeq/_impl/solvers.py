@@ -90,13 +90,102 @@ class FixedGridODESolver(object):
         for t0, t1 in zip(time_grid[:-1], time_grid[1:]):
             dy = self.step_func(self.func, t0, t1 - t0, y0)
             y1 = tuple(y0_ + dy_ for y0_, dy_ in zip(y0, dy))
-            y0 = y1
 
             while j < len(t) and t1 >= t[j]:
                 solution.append(self._linear_interp(t0, t1, y0, y1, t[j]))
                 j += 1
-
+            y0 = y1
         return tuple(map(torch.stack, tuple(zip(*solution))))
+
+    def _linear_interp(self, t0, t1, y0, y1, t):
+        if t == t0:
+            return y0
+        if t == t1:
+            return y1
+        t0, t1, t = t0.to(y0[0]), t1.to(y0[0]), t.to(y0[0])
+        slope = tuple((y1_ - y0_) / (t1 - t0) for y0_, y1_, in zip(y0, y1))
+        return tuple(y0_ + slope_ * (t - t0) for y0_, slope_ in zip(y0, slope))
+
+
+class ParallelFixedGridODESolver(object):
+    __metaclass__ = abc.ABCMeta
+
+    def __init__(self, func, y0, step_size=None, grid_constructor=None, **unused_kwargs):
+        super(ParallelFixedGridODESolver, self).__init__()
+        unused_kwargs.pop('rtol', None)
+        unused_kwargs.pop('atol', None)
+        _handle_unused_kwargs(self, unused_kwargs)
+        del unused_kwargs
+
+        self.func = func
+        self.y0 = y0
+
+        if step_size is not None and grid_constructor is None:
+            self.grid_constructor = self._grid_constructor_from_step_size(step_size)
+        elif grid_constructor is None:
+            self.grid_constructor = lambda f, y0, t: t
+        else:
+            raise ValueError("step_size and grid_constructor are exclusive arguments.")
+
+    def _grid_constructor_from_step_size(self, step_size):
+        # TODO: handle t
+        def _grid_constructor(func, y0, t):
+            start_time = t.min()
+            end_time = t.max()
+
+            niters = torch.ceil((end_time - start_time) / step_size + 1).item()
+            t_infer = torch.arange(0, niters).to(t) * step_size + start_time
+            if t_infer[-1] > end_time:
+                t_infer[-1] = end_time
+
+            return t_infer
+
+        return _grid_constructor
+
+    @property
+    @abc.abstractmethod
+    def order(self):
+        pass
+
+    @abc.abstractmethod
+    def step_func(self, func, t, dt, y):
+        pass
+
+    def integrate(self, t):
+        # _assert_increasing(t)
+        m = t.shape[1]
+        t_max = t.shape[0]
+        t = t.type_as(self.y0[0])
+        time_grid = self.grid_constructor(self.func, self.y0, t)
+        time_grid = time_grid.to(self.y0[0])
+
+        # solution: List[M][T]
+        solution_lst = [[(r,)] for r in self.y0[0]]
+
+        # j: List[M]
+        j_lst = [1] * m
+        y0 = self.y0
+        for t0, t1 in zip(time_grid[:-1], time_grid[1:]):
+            dy = self.step_func(self.func, t0, t1 - t0, y0)
+            y1 = tuple(y0_ + dy_ for y0_, dy_ in zip(y0, dy))
+
+            for mi in range(m):
+                j = j_lst[mi]
+                while j < t_max and t1 >= t[j, mi]:
+                    sol = self._linear_interp(t0, t1, (y0[0][mi],), (y1[0][mi],), t[j, mi])
+                    solution_lst[mi].append(sol)
+                    j += 1
+                j_lst[mi] = j
+            y0 = y1
+
+        # solution: List[T] array of M, 1, D
+        solution = []
+        for i in range(t_max):
+            tmp = [solution_lst[j][i][0] for j in range(m)]
+            # tmp_mat: M, 1, D
+            tmp_mat = torch.stack(tmp)
+            solution.append(tmp_mat)
+        return (torch.stack(solution),)
 
     def _linear_interp(self, t0, t1, y0, y1, t):
         if t == t0:

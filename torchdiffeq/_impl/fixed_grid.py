@@ -1,8 +1,18 @@
-from .solvers import FixedGridODESolver
+from .solvers import FixedGridODESolver, ParallelFixedGridODESolver
 from . import rk_common
 
 
 class Euler(FixedGridODESolver):
+
+    def step_func(self, func, t, dt, y):
+        return tuple(dt * f_ for f_ in func(t, y))
+
+    @property
+    def order(self):
+        return 1
+
+
+class EulerPar(ParallelFixedGridODESolver):
 
     def step_func(self, func, t, dt, y):
         return tuple(dt * f_ for f_ in func(t, y))

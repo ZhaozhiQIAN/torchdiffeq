@@ -1,6 +1,6 @@
 from .tsit5 import Tsit5Solver
 from .dopri5 import Dopri5Solver
-from .fixed_grid import Euler, Midpoint, RK4
+from .fixed_grid import Euler, Midpoint, RK4, EulerPar
 from .fixed_adams import AdamsBashforth, AdamsBashforthMoulton
 from .adams import VariableCoefficientAdamsBashforth
 from .misc import _check_inputs
@@ -12,6 +12,7 @@ SOLVERS = {
     'tsit5': Tsit5Solver,
     'dopri5': Dopri5Solver,
     'euler': Euler,
+    'euler_par': EulerPar,
     'midpoint': Midpoint,
     'rk4': RK4,
 }
