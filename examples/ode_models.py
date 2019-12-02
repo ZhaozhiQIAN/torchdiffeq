@@ -4,6 +4,65 @@ import torch
 import torch.nn as nn
 
 
+class HigherOrderOde(nn.Module):
+
+    def __init__(self, dat_dict, batch_size=1, dim=2, order=2, hidden_size=50):
+        super(HigherOrderOde, self).__init__()
+
+        self.dim = dim
+        self.order = order
+        self.batch_size = batch_size
+        # assert self.batch_size == 1
+
+        eid_list = list(dat_dict.keys())
+        self.eid_to_id = dict(zip(eid_list, range(len(eid_list))))
+
+        # imitate the size of batch_y0
+        init_mat = np.zeros((len(eid_list), 1, dim * order))
+        for eid, v in dat_dict.items():
+            t = v['t'].numpy()
+            x = v['x'].numpy()
+            idx = self.eid_to_id[eid]
+            init_mat[idx, 0, :dim] = x[0, ...]
+
+            if order > 1 and len(t) > 1:
+                init_mat[idx, 0, dim:(2 * dim + 1)] = (x[1, ...] - x[0, ...]) / (t[1] - t[0])
+
+        self.init_cond_mat = torch.nn.Parameter(torch.tensor(init_mat, dtype=torch.float32))
+        self.init_cond = None
+
+        self.net = nn.Sequential(
+            nn.Linear(self.dim * self.order, hidden_size),
+            nn.Tanh(),
+            nn.Linear(hidden_size, self.dim),
+        )
+
+        for m in self.net.modules():
+            if isinstance(m, nn.Linear):
+                nn.init.normal_(m.weight, mean=0, std=0.1)
+                nn.init.constant_(m.bias, val=0)
+
+    def set_init_cond(self, eids):
+        if len(eids) == 1:
+            idx = self.eid_to_id[eids[0]]
+            self.init_cond = self.init_cond_mat[idx:idx+1, ...]
+        else:
+            idx = np.array([self.eid_to_id[x] for x in eids])
+            id_torch = torch.from_numpy(idx)
+            self.init_cond = self.init_cond_mat[id_torch, ...]
+
+    def forward(self, t, y):
+        y = y + self.init_cond
+        output_list = []
+
+        y_i = y[..., self.dim:]
+        output_list.append(y_i)
+
+        output_list.append(self.net(y))
+
+        return torch.cat(output_list, axis=len(output_list[0].shape) - 1)
+
+
 class ODEFunc(nn.Module):
 
     def __init__(self, eps=100, dim_y=2):
