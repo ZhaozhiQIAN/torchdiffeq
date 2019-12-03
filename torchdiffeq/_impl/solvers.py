@@ -128,7 +128,6 @@ class ParallelFixedGridODESolver(object):
             raise ValueError("step_size and grid_constructor are exclusive arguments.")
 
     def _grid_constructor_from_step_size(self, step_size):
-        # TODO: handle t
         def _grid_constructor(func, y0, t):
             start_time = t.min()
             end_time = t.max()
@@ -172,7 +171,11 @@ class ParallelFixedGridODESolver(object):
             for mi in range(m):
                 j = j_lst[mi]
                 while j < t_max and t1 >= t[j, mi]:
-                    sol = self._linear_interp(t0, t1, (y0[0][mi],), (y1[0][mi],), t[j, mi])
+                    # TODO: if t[j, mi] < 0
+                    if t[j, mi] < 0:
+                        sol = (torch.zeros_like(y0[0][mi]), )
+                    else:
+                        sol = self._linear_interp(t0, t1, (y0[0][mi],), (y1[0][mi],), t[j, mi])
                     solution_lst[mi].append(sol)
                     j += 1
                 j_lst[mi] = j

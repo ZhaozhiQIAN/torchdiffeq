@@ -3,3 +3,6 @@
 *.egg
 *__pycache__*
 *.png
+examples/data
+examples/.ipynb_checkpoints
+examples/png*
