@@ -35,15 +35,13 @@ class BaselineLSTM(nn.Module):
         return torch.cat(out_list, dim=0)
 
 
-class BaselineTimeLSTM(nn.Module):
+class BaselineTimeGRU(nn.Module):
 
     def __init__(self, input_dim, hidden_dim, output_dim):
-        super(BaselineTimeLSTM, self).__init__()
+        super(BaselineTimeGRU, self).__init__()
         self.hidden_dim = hidden_dim
 
-        # The LSTM takes word embeddings as inputs, and outputs hidden states
-        # with dimensionality hidden_dim.
-        self.lstm = nn.LSTM(input_dim + 1, hidden_dim)
+        self.gru = nn.GRU(input_dim + 1, hidden_dim)
 
         # The linear layer that maps from hidden state space to output space
         self.lin = nn.Linear(hidden_dim, output_dim)
@@ -60,17 +58,32 @@ class BaselineTimeLSTM(nn.Module):
         y_in = torch.cat((y0, t0), dim=-1)
 
         # initialize lstm with y0
-        out, hidden = self.lstm(y_in)
+        out, hidden = self.gru(y_in)
         out_linear = self.lin(out)
         out_with_t = torch.cat((out_linear, t[1:2]), dim=-1)
 
         out_list = [out_linear]
         # run the remaining iterations
         for i in range(t_max - 1):
-            out, hidden = self.lstm(out_with_t, hidden)
+            out, hidden = self.gru(out_with_t, hidden)
             out_linear = self.lin(out)
             if (i + 2) < t_max:
                 out_with_t = torch.cat((out_linear, t[i + 2:i + 3]), dim=-1)
             out_list.append(out_linear)
 
         return torch.cat(out_list, dim=0)
+
+
+class SLP(nn.Module):
+
+    def __init__(self, latent_dim=4, obs_dim=2, nhidden=20):
+        super(SLP, self).__init__()
+        self.relu = nn.ReLU(inplace=True)
+        self.fc1 = nn.Linear(latent_dim, nhidden)
+        self.fc2 = nn.Linear(nhidden, obs_dim)
+
+    def forward(self, z):
+        out = self.fc1(z)
+        out = self.relu(out)
+        out = self.fc2(out)
+        return out
