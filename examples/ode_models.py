@@ -4,6 +4,118 @@ import torch
 import torch.nn as nn
 
 
+class ODEBase(nn.Module):
+    def __init__(self):
+        super(ODEBase, self).__init__()
+        self.counter_list = list()
+        self.counter = 0
+
+    def reset_counter(self):
+        self.counter_list.append(self.counter)
+        self.counter = 0
+
+
+class ODEFunc0(ODEBase):
+
+    def __init__(self, dim_y=2, dim_hidden=50):
+        super(ODEFunc0, self).__init__()
+
+        self.dim_y = dim_y
+        self.dim_hidden = dim_hidden
+
+        self.net = nn.Sequential(
+            nn.Linear(self.dim_y, self.dim_hidden),
+            nn.Tanh(),
+            nn.Linear(self.dim_hidden, self.dim_y),
+        )
+
+        for m in self.net.modules():
+            if isinstance(m, nn.Linear):
+                nn.init.normal_(m.weight, mean=0, std=0.1)
+                nn.init.constant_(m.bias, val=0)
+
+    def forward(self, t, y):
+        self.counter += 1
+        return self.net(y)
+
+
+class FSODE(ODEBase):
+    def __init__(self, input_dim=4, hidden_dim=20):
+        super(FSODE, self).__init__()
+        # slow net
+        self.net_y = LatentBlock(input_dim, hidden_dim)
+        self.lin_y = nn.Linear(hidden_dim, input_dim)
+
+        # fast net
+        self.net_x1 = LatentBlock(input_dim, hidden_dim)
+        self.net_x2 = LatentBlock(hidden_dim, hidden_dim)
+        self.lin_x = nn.Linear(hidden_dim, input_dim)
+
+    def forward(self, t, y):
+        self.counter += 1
+
+        # slow net
+        y_out = self.net_y(y)
+        y_out_final = self.lin_y(y_out)
+
+        # fast net
+        x1_out = self.net_x1(y)
+        x2_in = y_out + x1_out
+        x2_out = self.net_x2(x2_in)
+        x_out_final = self.lin_x(x2_out)
+
+        return x_out_final + y_out_final
+
+    def forward_slow(self, t, y):
+        y_out = self.net_y(y)
+        y_out_final = self.lin_y(y_out)
+        return y_out_final
+
+    def forward_fast(self, t, y):
+        y_out = self.net_y(y)
+        x1_out = self.net_x1(y)
+        x2_in = y_out + x1_out
+        x2_out = self.net_x2(x2_in)
+
+        x_out_final = self.lin_x(x2_out)
+
+        return x_out_final
+
+
+class HigherOrderOdeV2(ODEBase):
+
+    def __init__(self, dim=2, hidden_size=50):
+        super(HigherOrderOdeV2, self).__init__()
+
+        assert dim % 2 == 0
+
+        self.order = 2
+        self.dim = dim // self.order
+
+        self.net = nn.Sequential(
+            nn.Linear(self.dim * self.order, hidden_size),
+            nn.Tanh(),
+            nn.Linear(hidden_size, self.dim),
+        )
+
+        for m in self.net.modules():
+            if isinstance(m, nn.Linear):
+                nn.init.normal_(m.weight, mean=0, std=0.1)
+                nn.init.constant_(m.bias, val=0)
+
+    def forward(self, t, y):
+        self.counter += 1
+
+        output_list = []
+
+        y_i = y[..., self.dim:]
+        output_list.append(y_i)
+
+        output_list.append(self.net(y))
+
+        return torch.cat(output_list, axis=len(output_list[0].shape) - 1)
+
+
 class EncoderLSTM(nn.Module):
 
     def __init__(self, input_dim, hidden_dim, output_dim):
@@ -43,46 +155,15 @@ class LatentBlock(nn.Module):
 
     def __init__(self, input_dim=4, nhidden=20):
         super(LatentBlock, self).__init__()
-        self.elu = nn.ELU(inplace=True)
-        self.fc1 = nn.Linear(input_dim, nhidden)
-        self.fc2 = nn.Linear(nhidden, nhidden)
-
-    def forward(self, x):
-        out = self.fc1(x)
-        out = self.elu(out)
-        out = self.fc2(out)
-        out = self.elu(out)
-        return out
-
-
-class HigherOrderOdeNoInit(nn.Module):
-
-    def __init__(self, dim=2, order=2, hidden_size=50):
-        super(HigherOrderOdeNoInit, self).__init__()
-
-        self.dim = dim
-        self.order = order
 
         self.net = nn.Sequential(
-            nn.Linear(self.dim * self.order, hidden_size),
+            nn.Linear(input_dim, nhidden),
             nn.Tanh(),
-            nn.Linear(hidden_size, self.dim),
+            nn.Linear(nhidden, nhidden),
         )
 
-        for m in self.net.modules():
-            if isinstance(m, nn.Linear):
-                nn.init.normal_(m.weight, mean=0, std=0.1)
-                nn.init.constant_(m.bias, val=0)
-
-    def forward(self, t, y):
-        output_list = []
-
-        y_i = y[..., self.dim:]
-        output_list.append(y_i)
-
-        output_list.append(self.net(y))
-
-        return torch.cat(output_list, axis=len(output_list[0].shape) - 1)
+    def forward(self, x):
+        return self.net(x)
 
 
 class HigherOrderOde(nn.Module):
@@ -234,29 +315,6 @@ class ODEFunc(nn.Module):
         return out * torch.tensor([1./ (self.eps / 10), 1.])
 
 
-class ODEFunc0(nn.Module):
-
-    def __init__(self, dim_y=2, dim_hidden=50):
-        super(ODEFunc0, self).__init__()
-
-        self.dim_y = dim_y
-        self.dim_hidden = dim_hidden
-
-        self.net = nn.Sequential(
-            nn.Linear(self.dim_y, self.dim_hidden),
-            nn.Tanh(),
-            nn.Linear(self.dim_hidden, self.dim_y),
-        )
-
-        for m in self.net.modules():
-            if isinstance(m, nn.Linear):
-                nn.init.normal_(m.weight, mean=0, std=0.1)
-                nn.init.constant_(m.bias, val=0)
-
-    def forward(self, t, y):
-        return self.net(y)
-
-
 class ODEFuncAug(nn.Module):
 
     def __init__(self, dim_y=2, dim_aug=2):
@@ -363,46 +421,6 @@ class ODEFuncLayeredCombined(nn.Module):
 
         return x_out + y_out
 
-
-class FSODE(nn.Module):
-    def __init__(self, input_dim=4, hidden_dim=20):
-        super(FSODE, self).__init__()
-        # slow net
-        self.net_y = LatentBlock(input_dim, hidden_dim)
-        self.lin_y = nn.Linear(hidden_dim, input_dim)
-
-        # fast net
-        self.net_x1 = LatentBlock(input_dim, hidden_dim)
-        self.net_x2 = LatentBlock(hidden_dim, hidden_dim)
-        self.lin_x = nn.Linear(hidden_dim, input_dim)
-
-    def forward(self, t, y):
-        # slow net
-        y_out = self.net_y(y)
-        y_out_final = self.lin_y(y_out)
-
-        # fast net
-        x1_out = self.net_x1(y)
-        x2_in = y_out + x1_out
-        x2_out = self.net_x2(x2_in)
-        x_out_final = self.lin_x(x2_out)
-
-        return x_out_final + y_out_final
-
-    def forward_slow(self, t, y):
-        y_out = self.net_y(y)
-        y_out_final = self.lin_y(y_out)
-        return y_out_final
-
-    def forward_fast(self, t, y):
-        y_out = self.net_y(y)
-        x1_out = self.net_x1(y)
-        x2_in = y_out + x1_out
-        x2_out = self.net_x2(x2_in)
-
-        x_out_final = self.lin_x(x2_out)
-
-        return x_out_final
 
 
 class ODEFuncLayeredResidual(nn.Module):

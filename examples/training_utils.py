@@ -146,7 +146,7 @@ def training_loop_v2(niters, data_fold, batch_size, encode_t, optimizer, test_fr
 
         optimizer.zero_grad()
 
-        loss = loss_func(y_target, y_target_mask, gru_d_input, t_delta_dec)
+        loss = loss_func(y_target, y_target_mask, gru_d_input, t_delta_dec, 'train')
         loss.backward()
         optimizer.step()
 
@@ -160,7 +160,7 @@ def training_loop_v2(niters, data_fold, batch_size, encode_t, optimizer, test_fr
                     t, y, y_mask, eids = get_all_stack_t(f)
                     y_target, y_target_mask, gru_d_input, t_delta_dec = get_input_for_grud(t, y, y_mask, encode_t, device)
 
-                    loss = loss_func(y_target, y_target_mask, gru_d_input, t_delta_dec)
+                    loss = loss_func(y_target, y_target_mask, gru_d_input, t_delta_dec, 'val')
                     this_n = torch.sum(y_target_mask.to(y)).numpy()
                     n += this_n
                     total_loss += loss.item() * this_n

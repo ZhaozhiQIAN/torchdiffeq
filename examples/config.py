@@ -3,7 +3,7 @@ import warnings
 import functools
 
 D_TYPE = torch.float32
-DEVICE = torch.device('cuda:' + str(0) if torch.cuda.is_available() else 'cpu')
+DEVICE = torch.device('cuda:' + str(1) if torch.cuda.is_available() else 'cpu')
 
 
 def deprecated(func):
