@@ -135,6 +135,27 @@ def get_input_for_grud(t, y, y_mask, encode_t, device=DEVICE):
     return y_target, y_target_mask, gru_d_input, t_delta[enc_step:].to(device)
 
 
+def testing(data_fold, encode_t, loss_func, device=DEVICE):
+    start = time.time()
+
+    with torch.no_grad():
+        val_fold_list = get_partition_stack_t(data_fold['test'], 80)
+        total_loss = 0
+        n = 0
+        for f in val_fold_list:
+            t, y, y_mask, eids = get_all_stack_t(f)
+            y_target, y_target_mask, gru_d_input, t_delta_dec = get_input_for_grud(t, y, y_mask, encode_t, device)
+
+            loss = loss_func(y_target, y_target_mask, gru_d_input, t_delta_dec, 'test')
+            this_n = torch.sum(y_target_mask.to(y)).numpy()
+            n += this_n
+            total_loss += loss.item() * this_n
+        loss = total_loss / n
+    end = time.time()
+
+    return loss, end - start
+
+
 def training_loop_v2(niters, data_fold, batch_size, encode_t, optimizer, test_freq, loss_func, save_func, device=DEVICE):
     ii = 0
     best_loss = 10000

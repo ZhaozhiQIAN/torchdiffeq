@@ -28,7 +28,7 @@ class FilterLinear_V2(nn.Module):
         self.out_features = out_features
 
         self.filter_square_matrix = None
-        self.filter_square_matrix = Variable(filter_square_matrix.to(device), requires_grad=False)
+        self.filter_square_matrix = Variable(filter_square_matrix, requires_grad=False).to(device)
         self.weight = Parameter(torch.Tensor(out_features, in_features).to(device))
         if bias:
             self.bias = Parameter(torch.Tensor(out_features).to(device))
@@ -92,7 +92,7 @@ class GRUD_V2(nn.Module):
         self.rl = nn.Linear(input_size + hidden_size + self.mask_size, hidden_size).to(device)
         self.hl = nn.Linear(input_size + hidden_size + self.mask_size, hidden_size).to(device)
 
-        self.gamma_x_l = FilterLinear_V2(self.delta_size, self.delta_size, self.identity, device)
+        self.gamma_x_l = FilterLinear_V2(self.delta_size, self.delta_size, self.identity, bias=True, device=device)
 
         self.gamma_h_l = nn.Linear(self.delta_size, self.hidden_size).to(device)
 

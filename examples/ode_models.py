@@ -2,6 +2,7 @@ import numpy as np
 
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 
 
 class ODEBase(nn.Module):
@@ -13,6 +14,43 @@ class ODEBase(nn.Module):
     def reset_counter(self):
         self.counter_list.append(self.counter)
         self.counter = 0
+
+
+class AttentiveODE(ODEBase):
+    def __init__(self, dim_y=2, dim_hidden=None):
+        super(AttentiveODE, self).__init__()
+
+        self.dim_y = dim_y
+        self.dim_hidden = dim_hidden
+        self.gru_hidden = None
+
+        if dim_hidden is not None:
+            self.net = nn.Sequential(
+                nn.Linear(self.dim_y * 2, self.dim_hidden),
+                nn.Tanh(),
+                nn.Linear(self.dim_hidden, self.dim_y),
+            )
+        else:
+            self.net = nn.Linear(self.dim_y * 2, self.dim_y)
+
+        self.attn = nn.Linear(dim_y * 2, 1)
+
+        for m in self.net.modules():
+            if isinstance(m, nn.Linear):
+                nn.init.normal_(m.weight, mean=0, std=0.1)
+                nn.init.constant_(m.bias, val=0)
+
+    def set_gru_hidden(self, gru_hidden):
+        self.gru_hidden = gru_hidden
+
+    def forward(self, t, y):
+        self.counter += 1
+        attn_input = torch.cat((self.gru_hidden, y.repeat((1, self.gru_hidden.shape[1], 1))), 2)
+        attn_linear = self.attn(attn_input)
+        attn_score = F.softmax(attn_linear, dim=1)
+        context_vector = torch.bmm(attn_score.permute((0, 2, 1)), self.gru_hidden)
+        ode_input = torch.cat((y, context_vector), dim=2)
+        return self.net(ode_input)
 
 
 class ODEFunc0(ODEBase):
@@ -37,6 +75,19 @@ class ODEFunc0(ODEBase):
     def forward(self, t, y):
         self.counter += 1
         return self.net(y)
+
+
+class ODELinear(ODEBase):
+
+    def __init__(self, dim_y=2):
+        super(ODELinear, self).__init__()
+
+        self.dim_y = dim_y
+        self.lin = nn.Linear(self.dim_y, self.dim_y)
+
+    def forward(self, t, y):
+        self.counter += 1
+        return self.lin(y)
 
 
 class FSODE(ODEBase):
@@ -82,10 +133,10 @@ class FSODE(ODEBase):
         return x_out_final
 
 
-class HigherOrderOdeV2(ODEBase):
+class HigherOrderOdeLatent(ODEBase):
 
     def __init__(self, dim=2, hidden_size=50):
-        super(HigherOrderOdeV2, self).__init__()
+        super(HigherOrderOdeLatent, self).__init__()
 
         assert dim % 2 == 0
 
